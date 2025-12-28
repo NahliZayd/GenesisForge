@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+
 import { Globe } from './Globe';
-import { MathUtils } from './MathUtils';
+import { WorkerManager } from './WorkerManager';
+
 
 export class QuadNode {
     public children: QuadNode[] = [];
@@ -17,26 +19,57 @@ export class QuadNode {
         this.createMesh();
     }
 
-    createMesh() {
-        // Temp visualization: Wireframe plane
-        this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 4, 4), new THREE.MeshBasicMaterial({ wireframe: true, color: this.getLevelColor() }));
-        this.updateTransform();
+    async createMesh() {
+        const resolution = 16;
+
+        const data = await WorkerManager.getInstance().generateGeometry(
+            this.faceNormal,
+            this.min,
+            this.max,
+            resolution,
+            this.globe.radius,
+            this.globe.params
+        );
+
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+
+        if (data.colors) {
+            geometry.setAttribute('color', new THREE.BufferAttribute(data.colors, 3));
+        }
+
+        geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
+        geometry.computeVertexNormals();
+
+        const material = data.colors ?
+            new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                flatShading: false, // Smooth shading to prevent transparency artifacts
+                roughness: 0.8,
+                metalness: 0.1,
+                side: THREE.DoubleSide // Render both sides
+            }) :
+            new THREE.MeshStandardMaterial({
+                color: 0xcccccc, // Fallback color
+                flatShading: false,
+                roughness: 1.0,
+                side: THREE.DoubleSide
+            });
+
+        this.mesh = new THREE.Mesh(geometry, material);
+
+
+        // No need for updateTransform() anymore as positions are generated in world space (relative to valid local origin) in the worker?
+        // Wait, the worker generates normalized sphere vectors * radius.
+        // That is already in object space relative to the planet center.
+        // If "Planet" is at (0,0,0), then we are good.
+
+        if (this.globe.container) this.globe.container.add(this.mesh);
     }
 
-    updateTransform() {
-        if (!this.mesh) return;
+    // Removed updateTransform() as geometry is baked.
 
-        // Very basic placement on the cube face (Not spherical yet, just visual debug)
-        const centerU = (this.min.x + this.max.x) / 2;
-        const centerV = (this.min.y + this.max.y) / 2;
-
-        // Convert screen center to 3D direction
-        const direction = MathUtils.cubeToSphere(this.faceNormal, centerU, centerV);
-
-        // Scale by radius
-        this.mesh.position.copy(direction).multiplyScalar(this.globe.radius);
-        this.mesh.lookAt(new THREE.Vector3(0, 0, 0));
-    }
 
     getLevelColor(): number {
         const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff];

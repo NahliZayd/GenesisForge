@@ -5,11 +5,8 @@ export class MathUtils {
     static cubeToSphere(faceNormal: THREE.Vector3, u: number, v: number): THREE.Vector3 {
         const localPoint = new THREE.Vector3();
 
-        // Find "Right" and "Up" vectors for the face
         const up = new THREE.Vector3(0, 1, 0);
 
-
-        // Handle Top/Bottom faces where up is parallel to normal
         if (Math.abs(faceNormal.y) > 0.9) {
             up.set(0, 0, 1);
         }
@@ -17,7 +14,6 @@ export class MathUtils {
         const tangent = new THREE.Vector3().crossVectors(up, faceNormal).normalize();
         const binormal = new THREE.Vector3().crossVectors(faceNormal, tangent).normalize();
 
-        // localPoint = normal + u * tangent + v * binormal
         localPoint.copy(faceNormal)
             .addScaledVector(tangent, u)
             .addScaledVector(binormal, v);
